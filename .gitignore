@@ -1,0 +1,6 @@
+/target
+
+# Secrets and Keys
+secret/
+data/
+config.toml
