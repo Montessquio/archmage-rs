@@ -31,6 +31,7 @@ pub struct Campaign {
 }
 
 impl Campaign {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         guild_id: u64,
         campaign_name: String,
@@ -104,7 +105,7 @@ impl CampaignLevels {
             // In this case we are overwriting
             // the given level, so we don't care
             // what it is and give it a blind pass.
-            return true;
+            true
         });
 
         if !is_valid {
@@ -123,7 +124,7 @@ impl CampaignLevels {
                 ).as_str());
             }
 
-            if left.is_some() && right.is_some() { sb.push_str("\n"); }
+            if left.is_some() && right.is_some() { sb.push('\n'); }
 
             if right.is_some() {
                 sb.push_str(format!("XP for level {} ({}) must be less than the XP required for the next level {} ({}).", 
@@ -185,75 +186,75 @@ mod tests {
         let mut levels = CampaignLevels::empty();
 
         // Assert can add and change valid entries.
-        assert_eq!(levels.add_level(1, 0).is_ok(), true);
-        assert_eq!(levels.xp_from_level(1), Some(&(0 as u64)));
+        assert!(levels.add_level(1, 0).is_ok());
+        assert_eq!(levels.xp_from_level(1), Some(&0_u64));
 
-        assert_eq!(levels.add_level(1, 50).is_ok(), true);
-        assert_eq!(levels.xp_from_level(1), Some(&(50 as u64)));
+        assert!(levels.add_level(1, 50).is_ok());
+        assert_eq!(levels.xp_from_level(1), Some(&50_u64));
 
         // Assert does not allow higher level w/ lower XP.
-        assert_eq!(levels.add_level(2, 0).is_err(), true);
+        assert!(levels.add_level(2, 0).is_err());
         assert_eq!(levels.xp_from_level(2), None);
-        assert_eq!(levels.add_level(2, 100).is_ok(), true);
-        assert_eq!(levels.xp_from_level(2), Some(&(100 as u64)));
+        assert!(levels.add_level(2, 100).is_ok());
+        assert_eq!(levels.xp_from_level(2), Some(&100_u64));
 
         // Assert setting existing entry to invalid state fails.
-        assert_eq!(levels.add_level(1, 150).is_err(), true);
+        assert!(levels.add_level(1, 150).is_err());
         // And old value is unchanged.
-        assert_eq!(levels.xp_from_level(1), Some(&(50 as u64)));
+        assert_eq!(levels.xp_from_level(1), Some(&50_u64));
 
         // Assert setting existing entry to new but valid state succeeds.
-        assert_eq!(levels.add_level(1, 25).is_ok(), true);
-        assert_eq!(levels.xp_from_level(1), Some(&(25 as u64)));
+        assert!(levels.add_level(1, 25).is_ok());
+        assert_eq!(levels.xp_from_level(1), Some(&25_u64));
 
         // Assert deletion works
-        assert_eq!(levels.remove_level(2).is_ok(), true);
+        assert!(levels.remove_level(2).is_ok());
         assert_eq!(levels.xp_from_level(2), None);
     }
 
     #[test]
     fn test_xp_conversion() {
-        let mut levels = CampaignLevels::new();
+        let levels = CampaignLevels::new();
 
-        assert_eq!(levels.xp_from_level(1), Some(&(0 as u64)));
-        assert_eq!(levels.level_from_xp(0), Some(1 as u64));
-        assert_eq!(levels.xp_from_level(2), Some(&(1000 as u64)));
-        assert_eq!(levels.level_from_xp(1000), Some(2 as u64));
-        assert_eq!(levels.xp_from_level(3), Some(&(3000 as u64)));
-        assert_eq!(levels.level_from_xp(3000), Some(3 as u64));
-        assert_eq!(levels.xp_from_level(4), Some(&(6000 as u64)));
-        assert_eq!(levels.level_from_xp(6000), Some(4 as u64));
-        assert_eq!(levels.xp_from_level(5), Some(&(10000 as u64)));
-        assert_eq!(levels.level_from_xp(10000), Some(5 as u64));
-        assert_eq!(levels.xp_from_level(6), Some(&(15000 as u64)));
-        assert_eq!(levels.level_from_xp(15000), Some(6 as u64));
-        assert_eq!(levels.xp_from_level(7), Some(&(21000 as u64)));
-        assert_eq!(levels.level_from_xp(21000), Some(7 as u64));
-        assert_eq!(levels.xp_from_level(8), Some(&(28000 as u64)));
-        assert_eq!(levels.level_from_xp(28000), Some(8 as u64));
-        assert_eq!(levels.xp_from_level(9), Some(&(36000 as u64)));
-        assert_eq!(levels.level_from_xp(36000), Some(9 as u64));
-        assert_eq!(levels.xp_from_level(10), Some(&(45000 as u64)));
-        assert_eq!(levels.level_from_xp(45000), Some(10 as u64));
-        assert_eq!(levels.xp_from_level(11), Some(&(55000 as u64)));
-        assert_eq!(levels.level_from_xp(55000), Some(11 as u64));
-        assert_eq!(levels.xp_from_level(12), Some(&(66000 as u64)));
-        assert_eq!(levels.level_from_xp(66000), Some(12 as u64));
-        assert_eq!(levels.xp_from_level(13), Some(&(78000 as u64)));
-        assert_eq!(levels.level_from_xp(78000), Some(13 as u64));
-        assert_eq!(levels.xp_from_level(14), Some(&(91000 as u64)));
-        assert_eq!(levels.level_from_xp(91000), Some(14 as u64));
-        assert_eq!(levels.xp_from_level(15), Some(&(105000 as u64)));
-        assert_eq!(levels.level_from_xp(105000), Some(15 as u64));
-        assert_eq!(levels.xp_from_level(16), Some(&(120000 as u64)));
-        assert_eq!(levels.level_from_xp(120000), Some(16 as u64));
-        assert_eq!(levels.xp_from_level(17), Some(&(136000 as u64)));
-        assert_eq!(levels.level_from_xp(136000), Some(17 as u64));
-        assert_eq!(levels.xp_from_level(18), Some(&(153000 as u64)));
-        assert_eq!(levels.level_from_xp(153000), Some(18 as u64));
-        assert_eq!(levels.xp_from_level(19), Some(&(171000 as u64)));
-        assert_eq!(levels.level_from_xp(171000), Some(19 as u64));
-        assert_eq!(levels.xp_from_level(20), Some(&(190000 as u64)));
-        assert_eq!(levels.level_from_xp(190000), Some(20 as u64));
+        assert_eq!(levels.xp_from_level(1), Some(&0_u64));
+        assert_eq!(levels.level_from_xp(0), Some(1_u64));
+        assert_eq!(levels.xp_from_level(2), Some(&1000_u64));
+        assert_eq!(levels.level_from_xp(1000), Some(2_u64));
+        assert_eq!(levels.xp_from_level(3), Some(&3000_u64));
+        assert_eq!(levels.level_from_xp(3000), Some(3_u64));
+        assert_eq!(levels.xp_from_level(4), Some(&6000_u64));
+        assert_eq!(levels.level_from_xp(6000), Some(4_u64));
+        assert_eq!(levels.xp_from_level(5), Some(&10000_u64));
+        assert_eq!(levels.level_from_xp(10000), Some(5_u64));
+        assert_eq!(levels.xp_from_level(6), Some(&15000_u64));
+        assert_eq!(levels.level_from_xp(15000), Some(6_u64));
+        assert_eq!(levels.xp_from_level(7), Some(&21000_u64));
+        assert_eq!(levels.level_from_xp(21000), Some(7_u64));
+        assert_eq!(levels.xp_from_level(8), Some(&28000_u64));
+        assert_eq!(levels.level_from_xp(28000), Some(8_u64));
+        assert_eq!(levels.xp_from_level(9), Some(&36000_u64));
+        assert_eq!(levels.level_from_xp(36000), Some(9_u64));
+        assert_eq!(levels.xp_from_level(10), Some(&45000_u64));
+        assert_eq!(levels.level_from_xp(45000), Some(10_u64));
+        assert_eq!(levels.xp_from_level(11), Some(&55000_u64));
+        assert_eq!(levels.level_from_xp(55000), Some(11_u64));
+        assert_eq!(levels.xp_from_level(12), Some(&66000_u64));
+        assert_eq!(levels.level_from_xp(66000), Some(12_u64));
+        assert_eq!(levels.xp_from_level(13), Some(&78000_u64));
+        assert_eq!(levels.level_from_xp(78000), Some(13_u64));
+        assert_eq!(levels.xp_from_level(14), Some(&91000_u64));
+        assert_eq!(levels.level_from_xp(91000), Some(14_u64));
+        assert_eq!(levels.xp_from_level(15), Some(&105000_u64));
+        assert_eq!(levels.level_from_xp(105000), Some(15_u64));
+        assert_eq!(levels.xp_from_level(16), Some(&120000_u64));
+        assert_eq!(levels.level_from_xp(120000), Some(16_u64));
+        assert_eq!(levels.xp_from_level(17), Some(&136000_u64));
+        assert_eq!(levels.level_from_xp(136000), Some(17_u64));
+        assert_eq!(levels.xp_from_level(18), Some(&153000_u64));
+        assert_eq!(levels.level_from_xp(153000), Some(18_u64));
+        assert_eq!(levels.xp_from_level(19), Some(&171000_u64));
+        assert_eq!(levels.level_from_xp(171000), Some(19_u64));
+        assert_eq!(levels.xp_from_level(20), Some(&190000_u64));
+        assert_eq!(levels.level_from_xp(190000), Some(20_u64));
     }
 }

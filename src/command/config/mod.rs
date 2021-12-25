@@ -63,7 +63,7 @@ async fn set_prefix(ctx: &Context, msg: &Message, prefix: Option<&String>, db: &
             Some(guild_id) => match ctx.cache.guild(guild_id).await {
                 Some(guild) => match guild.user_permissions_in(&guild.channels[&msg.channel_id], &member) {
                     Ok(permissions) => permissions,
-                    Err(e) => {
+                    Err(_) => {
                         if let Err(why) = msg.channel_id.say(&ctx, "Error finding user role data (Code 1)").await {
                             println!("Error sending message: {:?}", why);
                         }
@@ -91,10 +91,8 @@ async fn set_prefix(ctx: &Context, msg: &Message, prefix: Option<&String>, db: &
         if let Some(guild) = msg.guild_id {
             if let Err(e) = db.set_prefix(guild.as_u64(), prefix.unwrap()).await {
                 let _ = msg.channel_id.say(&ctx, format!("Internal Error: {}", e)).await;
-            } else {
-                if let Err(_) = msg.react(&ctx, ReactionType::Unicode("✅".to_string())).await {
-                    let _ = msg.channel_id.say(&ctx, format!("Successfully set server prefix to `{}`", prefix.unwrap())).await;
-                }
+            } else if msg.react(&ctx, ReactionType::Unicode("✅".to_string())).await.is_err() {
+                let _ = msg.channel_id.say(&ctx, format!("Successfully set server prefix to `{}`", prefix.unwrap())).await;
             }
         }
     }
@@ -124,7 +122,7 @@ async fn add_dm(ctx: &Context, msg: &Message, mut args: Vec<String>, db: &MageDB
 
             let members = match channel.members(&ctx.cache).await {
                 Ok(m) => m,
-                Err(e) => {
+                Err(_) => {
                     if let Err(why) = msg.channel_id.say(ctx, "Error finding member data").await {
                         println!("Error sending message: {:?}", why);
                     }

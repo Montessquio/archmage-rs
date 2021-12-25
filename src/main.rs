@@ -1,3 +1,31 @@
+//!
+
+#[deny(bad_style,
+    const_err,
+    dead_code,
+    improper_ctypes,
+    non_shorthand_field_patterns,
+    no_mangle_generic_items,
+    overflowing_literals,
+    path_statements ,
+    patterns_in_fns_without_body,
+    private_in_public,
+    unconditional_recursion,
+    unused,
+    unused_allocation,
+    unused_comparisons,
+    unused_parens,
+    while_true)]
+
+#[deny(missing_debug_implementations,
+    missing_docs,
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_extern_crates,
+    unused_import_braces,
+    unused_qualifications,
+    unused_results)]
+
 use serde::Deserialize;
 use serenity::async_trait;
 use serenity::client::{Client, Context, EventHandler};
@@ -9,7 +37,6 @@ use serenity::model::{
 };
 use serenity::model::prelude::GuildStatus::*;
 use tracing::{span, event, Level};
-use tracing_subscriber;
 use std::fs;
 
 #[macro_use]
@@ -79,7 +106,7 @@ impl EventHandler for Archmage {
 
         // A None guild id means the message was not sent over the gateway.
         // We are not interested in these messages, so we can safely ignore it.
-        if let None = msg.guild_id {
+        if msg.guild_id.is_none() {
             return;
         }
         let guild_id = msg.guild_id.unwrap().0;
@@ -145,7 +172,7 @@ async fn leave_if_not_allowed(guild: &GuildStatus, ctx: &Context) -> bool {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     match guild {
@@ -158,7 +185,7 @@ async fn leave_if_not_allowed(guild: &GuildStatus, ctx: &Context) -> bool {
                 }
                 return false;
             }
-            return true;
+            true
         },
         OnlineGuild(g) => {
             // If the newly joined guild is not in the allowed list, leave.
@@ -169,7 +196,7 @@ async fn leave_if_not_allowed(guild: &GuildStatus, ctx: &Context) -> bool {
                 }
                 return false;
             }
-            return true;
+            true
         },
         // Can't do anything with offline guilds.
         _ => false

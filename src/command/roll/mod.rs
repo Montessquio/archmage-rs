@@ -26,7 +26,7 @@ pub async fn roll_handler(ctx: &Context, msg: &Message, mut args: Vec<String>) {
 
     let (result, work) = expr.eval();
 
-    if parser.errors.len() != 0 {
+    if !parser.errors.is_empty() {
         let _ = msg.channel_id.send_message(&ctx, |m| {
             m.content(format!("Error: {}", parser.errors[0].clone()));
             m
@@ -161,8 +161,8 @@ fn tokenize_expr(raw: String) -> Result<Vec<Token>, String> {
 
 /// LexToken parses either a die or value expression from a string.
 /// Returns None if the token is not valid.
-fn lex_token(token: &String) -> Option<Token> {
-    let mut t = token.clone();
+fn lex_token(token: &str) -> Option<Token> {
+    let mut t = token.to_owned();
     // Check for a const valur expr.
     if token.chars().all(|c| c.is_ascii_digit()) {
         return Some(Token::Const(t));
@@ -172,17 +172,17 @@ fn lex_token(token: &String) -> Option<Token> {
     lazy_static! {
         static ref RE: Regex = Regex::new(r#"^\d*d\d+$"#).unwrap();
     }
-    if RE.is_match(&token) {
+    if RE.is_match(token) {
         // Run the roll handler.
-        if token.starts_with("d") {
+        if token.starts_with('d') {
             // If the left hand expression is empty, that
             // means it's an implied leading 1.
             t = "1".to_owned();
-            t.push_str(token.clone().as_str());
+            t.push_str(token);
         }
         return Some(Token::Die(t));
     }
-    return None;
+    None
 }
 
 /******************
@@ -211,7 +211,7 @@ impl DiceParser {
 
     // Expr satisfies the rule `Expr => Term`.
     pub fn expr(&mut self) -> Box<dyn AstExpr> {
-        return self.term();
+        self.term()
     }
 
     // Term satisfies the rule for `Term	=> Factor  ([ '+' | '-' ]) Factor)*`
@@ -305,7 +305,7 @@ impl DiceParser {
         }
         
         self.errors.push("Could not parse input".to_owned());
-        return Box::new(AstConst(0));
+        Box::new(AstConst(0))
     }
 
     // Consumes the current token if it matches the given type,
@@ -317,7 +317,7 @@ impl DiceParser {
             return self.tokens[self.current as usize - 1].clone();
         }
         // If we are at the end, then there's only one token left to consume.
-        return self.tokens[self.current as usize].clone();
+        self.tokens[self.current as usize].clone()
     }
 
     // Returns whether the token is of the given type. Does not consume.
@@ -403,17 +403,18 @@ impl AstExpr for AstOp {
         use Token::*;
         match &self.op {
             Term(s) => match s.as_str() {
-                "+" => return (left.0 + right.0, steps),
-                "-" => return (left.0 - right.0, steps),
+                "+" => (left.0 + right.0, steps),
+                "-" => (left.0 - right.0, steps),
                 _ => panic!("Unreachable! The Lexer produced a TERM with value {}", s),
             },
             Factor(s) => match s.as_str() {
-                "*" => return (left.0 * right.0, steps),
+                "*" => (left.0 * right.0, steps),
                 "/" => {
                     if right.0 == 0 {
-                        return (0, "ERROR: DIVIDE BY ZERO".to_string());
+                        (0, "ERROR: DIVIDE BY ZERO".to_string())
+                    } else {
+                        (left.0 / right.0, steps)
                     }
-                    return (left.0 / right.0, steps);
                 },
                 _ => panic!("Unreachable! The Lexer produced a FACTOR with value {}", s),
             },

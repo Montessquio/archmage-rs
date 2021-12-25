@@ -1,6 +1,4 @@
 //! Manages all Campaign-related commands, such as creating new campaigns, adding DMs to those campaigns, and removing them.
-use futures::stream::StreamExt;
-
 use crate::model::Campaign;
 use crate::model::CampaignLevels;
 use tracing::{event, Level};
@@ -20,10 +18,20 @@ CREATE TABLE IF NOT EXISTS archmage_campaigns(
     characters_channel TEXT
 );*/
 
+    // Insert a campaign into the database.
     // Returns Some if the insertion was successful. Returns None if the item already exists. Returns err if there's a real error.
-    pub async fn create_campaign(&self, guild_id: &u64, name: String) -> Result<Option<()>, String>  {
+    pub async fn create_campaign(&self, guild_id: &u64, name: &str) -> Result<Option<()>, String>  {
+        let id = *guild_id as i64;
+
+        // Check for existing campaign
+        if let Ok(r) = self.read_campaign(guild_id, name).await {
+            if r.is_some() {
+                return Err(format!("A campaign named \"{}\" already exists!", name));
+            }
+        }
+
+        // Try to insert.
         let bin = bincode::serialize(&CampaignLevels::new()).unwrap();
-        let id = guild_id.clone() as i64;
         let query_result =  sqlx::query!(
             r#"
             INSERT INTO archmage_campaigns (
@@ -55,8 +63,9 @@ CREATE TABLE IF NOT EXISTS archmage_campaigns(
         Ok(Some(()))
     }
 
-    pub async fn delete_campaign(&self, guild_id: &u64, name: String) -> Result<(), String> {
-        let id = guild_id.clone() as i64;
+    /// Remove a campaign from the database.
+    pub async fn delete_campaign(&self, guild_id: &u64, name: &str) -> Result<(), String> {
+        let id = *guild_id as i64;
         let query_result =  sqlx::query!(
             r#"
             DELETE FROM archmage_campaigns WHERE guild = ? AND campaign = ?"#, 
@@ -80,8 +89,8 @@ CREATE TABLE IF NOT EXISTS archmage_campaigns(
     }
 
     /// Retrieve all campaigns associated with a particular guild.
-    pub async fn get_campaigns(&self, guild_id: &u64) -> Result<Vec<Campaign>, String> {
-        let id = guild_id.clone() as i64;
+    pub async fn read_campaigns(&self, guild_id: &u64) -> Result<Vec<Campaign>, String> {
+        let id = *guild_id as i64;
 
         let query_results =  sqlx::query!(
             r#"
@@ -108,15 +117,16 @@ CREATE TABLE IF NOT EXISTS archmage_campaigns(
                 r.inventory_en != 0, 
                 r.quests_en != 0, 
                 r.characters_en != 0, 
-                r.inventory_channel.clone().unwrap_or("a".to_owned()).parse::<u64>().ok(), 
-                r.quest_channel.clone().unwrap_or("a".to_owned()).parse::<u64>().ok(), 
-                r.characters_channel.clone().unwrap_or("a".to_owned()).parse::<u64>().ok()
+                r.inventory_channel.clone().unwrap_or_else(|| "a".to_owned()).parse::<u64>().ok(), 
+                r.quest_channel.clone().unwrap_or_else(|| "a".to_owned()).parse::<u64>().ok(), 
+                r.characters_channel.clone().unwrap_or_else(|| "a".to_owned()).parse::<u64>().ok()
             )
         }).collect());
     }
 
-    pub async fn get_campaign(&self, guild_id: &u64, campaign_name: &str) -> Result<Option<Campaign>, String> {
-        let id = guild_id.clone() as i64;
+    /// Retrieve one campaign by name.
+    pub async fn read_campaign(&self, guild_id: &u64, campaign_name: &str) -> Result<Option<Campaign>, String> {
+        let id = *guild_id as i64;
 
         let query_result =  sqlx::query!(
             r#"
@@ -136,23 +146,21 @@ CREATE TABLE IF NOT EXISTS archmage_campaigns(
             }
         }
 
-        let r = query_result.unwrap();
-
-        if r.is_none() { return Ok(None); }
-        
-        let r = r.unwrap();
-        
-        return Ok(Some(Campaign::new(
+        if let Some(r) = query_result.unwrap() {
+            Ok(Some(Campaign::new(
                 r.guild.parse::<u64>().unwrap(), 
                 r.campaign.clone(), 
                 bincode::deserialize(&r.xp).unwrap(), 
                 r.inventory_en != 0, 
                 r.quests_en != 0, 
                 r.characters_en != 0, 
-                r.inventory_channel.clone().unwrap_or("a".to_owned()).parse::<u64>().ok(), 
-                r.quest_channel.clone().unwrap_or("a".to_owned()).parse::<u64>().ok(), 
-                r.characters_channel.clone().unwrap_or("a".to_owned()).parse::<u64>().ok()
-            )
-        ));
+                r.inventory_channel.clone().unwrap_or_else(|| "a".to_owned()).parse::<u64>().ok(), 
+                r.quest_channel.clone().unwrap_or_else(|| "a".to_owned()).parse::<u64>().ok(), 
+                r.characters_channel.clone().unwrap_or_else(|| "a".to_owned()).parse::<u64>().ok()
+                )
+            ))
+        } else {
+            Ok(None)
+        }
     }
 }
