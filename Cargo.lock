@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "archmage-rs"
+name = "archmage"
 version = "0.1.0"
 dependencies = [
  "bincode",
