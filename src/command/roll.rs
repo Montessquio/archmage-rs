@@ -1,56 +1,82 @@
 //! A dice and arithmetic parsing and rolling utility.
-use serenity::client::Context;
-use serenity::model:: channel::Message;
+use eyre::{anyhow, bail, Result};
+use serenity::builder::CreateApplicationCommand;
+use serenity::model::application::interaction::InteractionResponseType;
+use serenity::model::prelude::command::CommandOptionType;
+use serenity::model::prelude::interaction::application_command::{ApplicationCommandInteraction, CommandDataOptionValue};
+use serenity::prelude::*;
 use serenity::async_trait;
 use regex::Regex;
 
-/******************
-	COMMAND HANDLER
-******************/
+pub async fn run(command: &ApplicationCommandInteraction, ctx: &Context) -> Result<()> {
+    let option = &command.data.options
+        .get(0)
+        .ok_or(anyhow!("Expected dice or calculation expression"))?
+        .resolved
+        .as_ref()
+        .ok_or(anyhow!("Unable to resolve dice or calculation expression"))?;
+
+    if let CommandDataOptionValue::String(input) = option {
+        roll_handler(ctx, command, input).await
+    } else {
+        bail!("Unexpected input type")
+    }
+}
+
+pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
+    command.name("roll").description("Roll a die or calculate a value").create_option(|option| {
+        option
+            .name("expression")
+            .description("A dice or calculator expression")
+            .kind(CommandOptionType::String)
+            .required(true)
+    })
+}
+
+pub fn register_short(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
+    command.name("r").description("Roll a die or calculate a value").create_option(|option| {
+        option
+            .name("expression")
+            .description("A dice or calculator expression")
+            .kind(CommandOptionType::String)
+            .required(true)
+    })
+}
 
 // RollHandler is a recursive descent dice and calculation expression parser.
-pub async fn roll_handler(ctx: &Context, msg: &Message, mut args: Vec<String>) {
-    if args[0].to_lowercase() == "roll" {
-        args.remove(0);
-    }
-
-    let tokenizer_out = tokenize_expr(args.join(""));
-    if tokenizer_out.is_err() {
-        let _ = msg.channel_id.say(&ctx, format!("Error: {}", tokenizer_out.err().unwrap())).await;
-        return;
-    }
+async fn roll_handler(ctx: &Context, command: &ApplicationCommandInteraction, input: &str) -> Result<()> {
+    let tokenizer_out = tokenize_expr(input)?;
     
     // Build a parse tree and check parsing errors.
-    let mut parser = DiceParser::new(tokenizer_out.unwrap());
+    let mut parser = DiceParser::new(tokenizer_out);
     let expr = parser.expr();
 
     let (result, work) = expr.eval();
 
     if !parser.errors.is_empty() {
-        let _ = msg.channel_id.send_message(&ctx, |m| {
-            m.content(format!("Error: {}", parser.errors[0].clone()));
-            m
-        }).await;
-        return;
+        bail!(parser.errors[0].clone());
     }
 
-    let _ = msg.channel_id.send_message(&ctx, |m| {
-        m.embed(|e| {
-            use serenity::utils::Color;
-            e.color(Color::from_rgb(0x00, 0xFF, 0x00));
-            e.description(args.join(""));
-            e.field("Rolls", work, false);
-            e.field("Result", result, false);
-            e.title(format!("{}#{} Rolled {}", msg.author.name, msg.author.discriminator, result));
+    let author = format!("{}#{}", command.user.name, command.user.discriminator);
+    command
+        .create_interaction_response(&ctx.http, |response| {
+            response
+                .kind(InteractionResponseType::ChannelMessageWithSource)
+                .interaction_response_data(|m| {
+                    m.embed(|e| {
+                        use serenity::utils::Color;
+                        e.color(Color::from_rgb(0x00, 0xFF, 0x00))
+                         .description(input)
+                         .field("Rolls", work, false)
+                         .field("Result", result, false)
+                         .title(format!("{} Rolled {}", author, result))
+                         .timestamp(chrono::Utc::now().to_rfc3339())
+                    })
+                })
+            }
+        ).await?;
 
-            let now = chrono::Utc::now();
-            e.timestamp(now.to_rfc3339());
-
-            e
-        });
-
-        m
-    }).await;
+    Ok(())
 }
 
 /******************
@@ -110,7 +136,7 @@ impl Token {
     }
 }
 
-fn tokenize_expr(raw: String) -> Result<Vec<Token>, String> {
+fn tokenize_expr(raw: &str) -> Result<Vec<Token>> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut sb: String = String::new();
 
@@ -124,7 +150,7 @@ fn tokenize_expr(raw: String) -> Result<Vec<Token>, String> {
                 // The previous token is over. Parse it before working on the next one.
                 if sb.chars().count() != 0 {
                     match lex_token(&sb) {
-                        None => return Err(format!("{} was not recognized as a valid number or dice expression (Code: 1)", sb)),
+                        None => bail!("{} was not recognized as a valid number or dice expression (Code: 1)", sb),
                         Some(tok) => tokens.push(tok),
                     }
                 }
@@ -151,7 +177,7 @@ fn tokenize_expr(raw: String) -> Result<Vec<Token>, String> {
     // that may not have been terminated by an operator.
     if sb.chars().count() != 0 {
         match lex_token(&sb) {
-            None => return Err(format!("{} was not recognized as a valid number or dice expression (Code: 2)", sb)),
+            None => bail!("{} was not recognized as a valid number or dice expression (Code: 2)", sb),
             Some(tok) => tokens.push(tok),
         }
     }
@@ -290,13 +316,13 @@ impl DiceParser {
         }
 
         if self.check(Token::Group(String::new())) && self.peek().value() == "(" {
-            self.consume();
+            let _ = self.consume();
 
             // In the case of a group, recurse back to the lowest priority and build a new subtree.
             let expr = self.expr();
             // Expect a closing paren.
             if self.check(Token::Group(String::new())) && self.peek().value() == ")" {
-                self.consume();
+                let _ = self.consume();
                 return expr;
             }
             // Error, unmatched Paren.

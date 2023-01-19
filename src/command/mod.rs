@@ -1,53 +1,30 @@
-use serenity::client::Context;
-use serenity::model:: channel::Message;
-use tracing::{span, Level};
-use regex::Regex;
+use serenity::{prelude::*, model::application::interaction::application_command::ApplicationCommandInteraction};
+use serenity::model::prelude::*;
+use eyre::{Result, anyhow};
 
-use crate::database::MageDB;
+use crate::archmage::Archmage;
 
 mod roll;
-mod config;
+mod ping;
 
-pub struct CommandHandler {
-
-}
-
-impl CommandHandler {
-    pub fn new() -> CommandHandler {
-        CommandHandler{}
+impl Archmage {
+    pub async fn register_commands_for_guild(&self, guild: &GuildId, ctx: &Context) -> Result<()> {
+        let _ = GuildId::set_application_commands(guild, &ctx.http, |commands| {
+            commands
+                .create_application_command(|command| ping::register(command))
+                .create_application_command(|command| roll::register(command))
+                .create_application_command(|command| roll::register_short(command))
+        })
+        .await?;
+    
+        Ok(())
     }
 
-    pub async fn dispatch(&self, text: String, ctx: &Context, msg: &Message, db: &MageDB) {
-        let span = span!(Level::INFO, "command dispatch");
-        let _guard = span.enter();
-
-        let args = message_to_args(&text);
-
-        match args[0].to_lowercase().as_str() {
-            // Handle config and its subcommands.
-            "config" => config::config_handler(ctx, msg, args, db).await,
-
-            // The roll command.
-            "roll" => roll::roll_handler(ctx, msg, args).await,
-
-            // Account for the !<dice_expr> shorthand.
-            _ => {
-                lazy_static! {
-                    static ref RE: Regex = Regex::new(r#"^\(*\d*d\d+"#).unwrap();
-                }
-                if RE.is_match(&args[0]) {
-                    // Run the roll handler.
-                    roll::roll_handler(ctx, msg, args).await;
-                }
-            },
-        };
+    pub async fn handle_command(&self, start_time: chrono::NaiveDateTime, command: &ApplicationCommandInteraction, ctx: &Context) -> Result<()> {
+        match command.data.name.as_str() {
+            "ping" => ping::run(start_time, command, &ctx).await,
+            "roll" | "r" => roll::run(command, &ctx).await,
+            _ => Err(anyhow!("Unimplemented Command!")),
+        }
     }
-}
-
-// Splits the arguments string by spaces, but preserves quoted groups.
-fn message_to_args(message: &str) -> Vec<String> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"[^\s"']+|("[^"]*")|('[^']*')"#).unwrap();
-    }
-    return RE.find_iter(message).map(|m| m.as_str().to_owned()).collect();
 }
