@@ -69,8 +69,10 @@ impl EventHandler for Archmage {
             event!(Level::ERROR, "{}", e);
         }
         else {
-            // Runs if the guild is allowed.
-            event!(Level::INFO, "Joined Guild {}", guild.id);
+            // Runs if the guild is allowed. Register commands and continue.
+            if let Err(e) = self.register_commands_for_guild(&guild.id, &ctx).await {
+                event!(Level::ERROR, "Error registering commands for guild '{}': {}", guild.id, e);
+            }
         }
     }
 
