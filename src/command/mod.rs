@@ -1,26 +1,22 @@
 use eyre::Result;
+use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::prelude::*;
 use serenity::{
     model::application::interaction::application_command::ApplicationCommandInteraction, prelude::*,
 };
-use serenity::model::application::interaction::InteractionResponseType;
 use tracing::{event, Level};
 
 use crate::archmage::Archmage;
 
+mod misc;
 mod music;
-mod ping;
-mod roll;
+use self::misc::CreateApplicationCommandsMiscExt;
 use self::music::CreateApplicationCommandsMusicExt;
 
 impl Archmage {
     pub async fn register_commands_for_guild(&self, guild: &GuildId, ctx: &Context) -> Result<()> {
         let _ = GuildId::set_application_commands(guild, &ctx.http, |commands| {
-            commands
-                .create_application_command(|command| ping::register(command))
-                .create_application_command(|command| roll::register(command))
-                .create_application_command(|command| roll::register_short(command))
-                .register_music_commands()
+            commands.register_misc_commands().register_music_commands()
         })
         .await?;
 
@@ -33,18 +29,23 @@ impl Archmage {
         command: &ApplicationCommandInteraction,
         ctx: &Context,
     ) -> Result<()> {
-        match command.data.name.as_str() {
-            "ping" => ping::run(start_time, command, &ctx).await,
-            "roll" | "r" => roll::run(command, &ctx).await,
-            _ => self.handle_unimplemented(command, &ctx).await,
+        macro_rules! handler {
+            ($fn:path) => {
+                if $fn(start_time, command, ctx).await? {
+                    return Ok(());
+                }
+            };
         }
-    }
 
-    async fn handle_unimplemented(
-        &self,
-        command: &ApplicationCommandInteraction,
-        ctx: &Context,
-    ) -> Result<()> {
+        // Fast-returns Err if the handler errors
+        // If the handler returns `true`, fast-exits
+        // with `Ok(())`. If the handler returns
+        // `false`, continues to the next handler.
+        handler!(misc::misc_handler);
+        handler!(music::music_handler);
+
+        // No handler consumed the command!
+        // Handle Unimplemented
         let response = command
                 .create_interaction_response(&ctx.http, |response| {
                     response
