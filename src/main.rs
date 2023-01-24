@@ -55,7 +55,7 @@ struct Config {
 
 lazy_static!{
     static ref CONFIG: Config = {
-        toml::from_str(&fs::read_to_string("secret/config.toml").unwrap()).expect("Invalid Configuration")
+        toml::from_str(&fs::read_to_string("secret/config.toml").expect("secret/config.toml not present")).expect("Invalid Configuration")
     };
 }
 
