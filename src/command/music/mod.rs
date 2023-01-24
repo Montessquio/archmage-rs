@@ -1,4 +1,8 @@
 use serenity::builder::CreateApplicationCommands;
+use serenity::model::application::interaction::application_command::ApplicationCommandInteraction;
+use serenity::prelude::*;
+
+use eyre::Result;
 
 mod play;
 mod playnow;
@@ -29,4 +33,11 @@ impl CreateApplicationCommandsMusicExt for CreateApplicationCommands {
         .create_application_command(|command| shuffle::register(command))
         .create_application_command(|command| nowplaying::register(command))
     }
+}
+
+pub async fn music_handler(_start_time: chrono::NaiveDateTime, command: &ApplicationCommandInteraction, _ctx: &Context) -> Result<bool> {
+    match command.data.name.as_str() {
+        "stub" => Ok(()),
+        _ => return Ok(false),
+    }.map(|_| true)
 }
