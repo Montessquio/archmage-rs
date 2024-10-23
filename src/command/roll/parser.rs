@@ -35,7 +35,7 @@ impl std::fmt::Display for Token {
 impl Token {
     /// Used to check if two objects are of the same variant regardless
     /// of what they have as contents.
-    pub fn id(&self) -> u64 {
+    pub fn id(&self) -> i64 {
         use Token::*;
         match self {
             Const(_) => 0,
@@ -222,7 +222,7 @@ impl DiceParser {
 
             // This should never fail because the tokenizer verifies that
             // this kind of token is purely numeric.
-            return Box::new(AstConst(t.value().parse::<u64>().unwrap()));
+            return Box::new(AstConst(t.value().parse::<i64>().unwrap()));
         }
 
         if self.check(Token::Die(String::new())) {
@@ -247,7 +247,7 @@ impl DiceParser {
 
             // This should never fail because the tokenizer verifies that
             // this kind of token is purely numeric.
-            let left = match split_die[0].parse::<u64>() {
+            let left = match split_die[0].parse::<i64>() {
                 Ok(num) => num,
                 Err(_) => {
                     self.errors.push(format!(
@@ -258,7 +258,7 @@ impl DiceParser {
                 }
             };
 
-            let right = match split_die[1].parse::<u64>() {
+            let right = match split_die[1].parse::<i64>() {
                 Ok(num) => num,
                 Err(_) => {
                     self.errors.push(format!(
@@ -313,9 +313,10 @@ impl DiceParser {
         self.tokens[self.current as usize].clone()
     }
 
-    // Returns whether the "current" field = len(tokens) - 1
+    // Returns whether the parser has any more tokens to consume,
+    // that is, if "current" field == len(tokens) - 1
     fn is_at_end(&self) -> bool {
-        self.current == (self.tokens.len() - 1) as u64
+        self.current == (self.tokens.len().saturating_sub(1)) as u64
     }
 }
 
@@ -323,27 +324,27 @@ impl DiceParser {
 /// to a final sum and a set of rolls (if any)
 pub trait AstExpr: Send + Sync {
     /// Eval returns a result and a "steps string"
-    fn eval(&self) -> (u64, String);
+    fn eval(&self) -> (i64, String);
 }
 
-struct AstConst(u64);
+struct AstConst(i64);
 
 /// An AstConst's value is simply itself.
 impl AstExpr for AstConst {
-    fn eval(&self) -> (u64, String) {
+    fn eval(&self) -> (i64, String) {
         (self.0, format!("{}", self.0))
     }
 }
 
 /// A random roll expression.
 struct AstDie {
-    left: u64,
-    right: u64,
+    left: i64,
+    right: i64,
 }
 
 /// AstDie 's value is rolled, 1-[right] rolled [left] times, then summed.
 impl AstExpr for AstDie {
-    fn eval(&self) -> (u64, String) {
+    fn eval(&self) -> (i64, String) {
         let mut sb = String::new();
         sb.push('[');
 
@@ -375,7 +376,7 @@ struct AstOp {
 
 /// Do the math.
 impl AstExpr for AstOp {
-    fn eval(&self) -> (u64, String) {
+    fn eval(&self) -> (i64, String) {
         let left = self.left.eval();
         let right = self.right.eval();
 
@@ -385,17 +386,17 @@ impl AstExpr for AstOp {
         use Token::*;
         match &self.op {
             Term(s) => match s.as_str() {
-                "+" => (left.0 + right.0, steps),
-                "-" => (left.0 - right.0, steps),
+                "+" => (left.0.saturating_add(right.0), steps),
+                "-" => (left.0.saturating_sub(right.0), steps),
                 _ => panic!("Unreachable! The Lexer produced a TERM with value {}", s),
             },
             Factor(s) => match s.as_str() {
-                "*" => (left.0 * right.0, steps),
+                "*" => (left.0.saturating_mul(right.0), steps),
                 "/" => {
                     if right.0 == 0 {
                         (0, "ERROR: DIVIDE BY ZERO".to_string())
                     } else {
-                        (left.0 / right.0, steps)
+                        (left.0.saturating_div(right.0), steps)
                     }
                 }
                 _ => panic!("Unreachable! The Lexer produced a FACTOR with value {}", s),
