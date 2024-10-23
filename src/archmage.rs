@@ -1,9 +1,9 @@
-use serenity::all::{CreateEmbed, CreateMessage};
-use serenity::model::prelude::Ready;
-use serenity::{prelude::*, model::prelude::*};
+use eyre::{bail, Result};
+use serenity::all::{CreateEmbed, CreateInteractionResponseMessage};
 use serenity::async_trait;
-use tracing::{Level, span, event};
-use eyre::{Result, bail};
+use serenity::model::prelude::Ready;
+use serenity::{model::prelude::*, prelude::*};
+use tracing::{event, span, Level};
 
 #[non_exhaustive]
 pub struct Archmage {}
@@ -17,23 +17,30 @@ impl EventHandler for Archmage {
             if let Err(e) = self.handle_command(start_time, &command, &ctx).await {
                 let err_id = uuid::Uuid::new_v4().as_simple().to_string();
                 let env = serde_json::to_string(&command).expect("JSON Serialization Failure");
-                event!(Level::ERROR, 
+                event!(
+                    Level::ERROR,
                     environment = &env.as_str(),
                     error = &format!("{}", e).as_str(),
                 );
 
-                let response = command.channel_id.send_message(&ctx.http, CreateMessage::new().embed(
-                    CreateEmbed::new()
-                        .color(Color::from_rgb(0x00, 0xFF, 0x00))
-                        .description(format!("Artifices failed, magic gone awry. Something is wrong in the Archmage's tower! (Your error code is {})", &err_id))
-                        .title("An Error Occurred")
-                        .timestamp(Timestamp::now())
-                )).await;
+                let response = command
+                    .create_response(
+                        &ctx.http,
+                        serenity::all::CreateInteractionResponse::Message(
+                            CreateInteractionResponseMessage::new().embed(
+                                    CreateEmbed::new()
+                                        .color(Color::from_rgb(0xFF, 0x00, 0x00))
+                                        .description(format!("Artifices failed, magic gone awry. Something is wrong in the Archmage's tower! (Your error code is {})", &err_id))
+                                        .title("An Error Occurred")
+                                        .timestamp(Timestamp::now())
+                    ))).await;
 
                 if let Err(e) = response {
-                    event!(Level::ERROR,
-                        error = &format!("{}", e).as_str(), 
-                        "DOUBLE FAULT! Error sending error message to user channel")
+                    event!(
+                        Level::ERROR,
+                        error = &format!("{}", e).as_str(),
+                        "DOUBLE FAULT! Error sending error message to user channel"
+                    )
                 }
             }
         }
@@ -47,12 +54,21 @@ impl EventHandler for Archmage {
         // Ensure only allowed guilds have the bot
         for guild in event.guilds {
             if let Err(e) = Self::leave_if_not_allowed(&guild.id, &ctx).await {
-                event!(Level::WARN, "Error leaving illegal Guild '{}': {}", guild.id, e);
-            }
-            else {
+                event!(
+                    Level::WARN,
+                    "Error leaving illegal Guild '{}': {}",
+                    guild.id,
+                    e
+                );
+            } else {
                 // Runs if the guild is allowed.
                 if let Err(e) = self.register_commands_for_guild(&guild.id, &ctx).await {
-                    event!(Level::ERROR, "Error registering commands for guild '{}': {}", guild.id, e);
+                    event!(
+                        Level::ERROR,
+                        "Error registering commands for guild '{}': {}",
+                        guild.id,
+                        e
+                    );
                 }
                 event!(Level::INFO, "Joined Guild {}", guild.id);
             }
@@ -67,11 +83,15 @@ impl EventHandler for Archmage {
         // If the newly joined guild is not in the allowed list, leave.
         if let Err(e) = Self::leave_if_not_allowed(&guild.id, &ctx).await {
             event!(Level::ERROR, "{}", e);
-        }
-        else {
+        } else {
             // Runs if the guild is allowed. Register commands and continue.
             if let Err(e) = self.register_commands_for_guild(&guild.id, &ctx).await {
-                event!(Level::ERROR, "Error registering commands for guild '{}': {}", guild.id, e);
+                event!(
+                    Level::ERROR,
+                    "Error registering commands for guild '{}': {}",
+                    guild.id,
+                    e
+                );
             }
         }
     }
@@ -88,7 +108,7 @@ impl EventHandler for Archmage {
 
 impl Archmage {
     pub fn new() -> Self {
-        Archmage{}
+        Archmage {}
     }
 
     // Leaves the provided guild if it's not in the allowed list.
