@@ -1,7 +1,6 @@
+use serenity::all::{CreateEmbed, CreateMessage};
 use serenity::model::prelude::Ready;
 use serenity::{prelude::*, model::prelude::*};
-use serenity::model::application::interaction::Interaction;
-use serenity::model::application::interaction::InteractionResponseType;
 use serenity::async_trait;
 use tracing::{Level, span, event};
 use eyre::{Result, bail};
@@ -14,7 +13,7 @@ impl EventHandler for Archmage {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         let start_time = chrono::Utc::now().naive_utc();
 
-        if let Interaction::ApplicationCommand(command) = interaction {
+        if let Interaction::Command(command) = interaction {
             if let Err(e) = self.handle_command(start_time, &command, &ctx).await {
                 let err_id = uuid::Uuid::new_v4().as_simple().to_string();
                 let env = serde_json::to_string(&command).expect("JSON Serialization Failure");
@@ -23,21 +22,13 @@ impl EventHandler for Archmage {
                     error = &format!("{}", e).as_str(),
                 );
 
-                let response = command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|m| {
-                            m.embed(|e| {
-                                use serenity::utils::Color;
-                                e.color(Color::from_rgb(0x00, 0xFF, 0x00))
-                                 .description(format!("Artifices failed, magic gone awry. Something is wrong in the Archmage's tower! (Your error code is {})", &err_id))
-                                 .title("An Error Occurred")
-                                 .timestamp(chrono::Utc::now().to_rfc3339())
-                            })
-                        })
-                    }
-                ).await;
+                let response = command.channel_id.send_message(&ctx.http, CreateMessage::new().embed(
+                    CreateEmbed::new()
+                        .color(Color::from_rgb(0x00, 0xFF, 0x00))
+                        .description(format!("Artifices failed, magic gone awry. Something is wrong in the Archmage's tower! (Your error code is {})", &err_id))
+                        .title("An Error Occurred")
+                        .timestamp(Timestamp::now())
+                )).await;
 
                 if let Err(e) = response {
                     event!(Level::ERROR,
@@ -56,7 +47,7 @@ impl EventHandler for Archmage {
         // Ensure only allowed guilds have the bot
         for guild in event.guilds {
             if let Err(e) = Self::leave_if_not_allowed(&guild.id, &ctx).await {
-                event!(Level::WARN, "Error leaving illegal Guild '{}': {}", guild.id.0, e);
+                event!(Level::WARN, "Error leaving illegal Guild '{}': {}", guild.id, e);
             }
             else {
                 // Runs if the guild is allowed.
@@ -69,7 +60,7 @@ impl EventHandler for Archmage {
     }
 
     // Runs when the bot joins a new guild.
-    async fn guild_create(&self, ctx: Context, guild: Guild, _: bool) {
+    async fn guild_create(&self, ctx: Context, guild: Guild, _: Option<bool>) {
         let span = span!(Level::INFO, "event guild_create");
         let _guard = span.enter();
 
@@ -79,7 +70,7 @@ impl EventHandler for Archmage {
         }
         else {
             // Runs if the guild is allowed.
-            event!(Level::INFO, "Joined Guild {}", guild.id.0);
+            event!(Level::INFO, "Joined Guild {}", guild.id);
         }
     }
 
@@ -102,10 +93,10 @@ impl Archmage {
     // Returns whether or not the guild was in the allowed list.
     async fn leave_if_not_allowed(guild: &GuildId, ctx: &Context) -> Result<()> {
         let allowlist = &crate::CONFIG.allowed_guilds;
-        if !allowlist.contains(guild.as_u64()) {
+        if !allowlist.contains(&guild.get()) {
             event!(Level::WARN, "Disconnecting from illegal guild: {}", guild);
             if let Err(error) = guild.leave(&ctx).await {
-                bail!("Error leaving guild '{}': {}", guild.as_u64(), error)
+                bail!("Error leaving guild '{}': {}", guild.get(), error)
             }
         }
         Ok(())

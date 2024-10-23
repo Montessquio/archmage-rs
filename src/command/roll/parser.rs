@@ -1,86 +1,8 @@
-//! A dice and arithmetic parsing and rolling utility.
-use eyre::{anyhow, bail, Result};
-use serenity::builder::CreateApplicationCommand;
-use serenity::model::application::interaction::InteractionResponseType;
-use serenity::model::prelude::command::CommandOptionType;
-use serenity::model::prelude::interaction::application_command::{ApplicationCommandInteraction, CommandDataOptionValue};
-use serenity::prelude::*;
-use serenity::async_trait;
+use eyre::{bail, Result};
 use regex::Regex;
 
-pub async fn run(command: &ApplicationCommandInteraction, ctx: &Context) -> Result<()> {
-    let option = &command.data.options
-        .get(0)
-        .ok_or(anyhow!("Expected dice or calculation expression"))?
-        .resolved
-        .as_ref()
-        .ok_or(anyhow!("Unable to resolve dice or calculation expression"))?;
-
-    if let CommandDataOptionValue::String(input) = option {
-        roll_handler(ctx, command, input).await
-    } else {
-        bail!("Unexpected input type")
-    }
-}
-
-pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
-    command.name("roll").description("Roll a die or calculate a value").create_option(|option| {
-        option
-            .name("expression")
-            .description("A dice or calculator expression")
-            .kind(CommandOptionType::String)
-            .required(true)
-    })
-}
-
-pub fn register_short(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
-    command.name("r").description("Roll a die or calculate a value").create_option(|option| {
-        option
-            .name("expression")
-            .description("A dice or calculator expression")
-            .kind(CommandOptionType::String)
-            .required(true)
-    })
-}
-
-// RollHandler is a recursive descent dice and calculation expression parser.
-async fn roll_handler(ctx: &Context, command: &ApplicationCommandInteraction, input: &str) -> Result<()> {
-    let tokenizer_out = tokenize_expr(input)?;
-    
-    // Build a parse tree and check parsing errors.
-    let mut parser = DiceParser::new(tokenizer_out);
-    let expr = parser.expr();
-
-    let (result, work) = expr.eval();
-
-    if !parser.errors.is_empty() {
-        bail!(parser.errors[0].clone());
-    }
-
-    let author = format!("{}#{}", command.user.name, command.user.discriminator);
-    command
-        .create_interaction_response(&ctx.http, |response| {
-            response
-                .kind(InteractionResponseType::ChannelMessageWithSource)
-                .interaction_response_data(|m| {
-                    m.embed(|e| {
-                        use serenity::utils::Color;
-                        e.color(Color::from_rgb(0x00, 0xFF, 0x00))
-                         .description(input)
-                         .field("Rolls", work, false)
-                         .field("Result", result, false)
-                         .title(format!("{} Rolled {}", author, result))
-                         .timestamp(chrono::Utc::now().to_rfc3339())
-                    })
-                })
-            }
-        ).await?;
-
-    Ok(())
-}
-
 /******************
-	LEXER
+    LEXER
 ******************/
 
 #[derive(Clone, Debug)]
@@ -150,7 +72,10 @@ fn tokenize_expr(raw: &str) -> Result<Vec<Token>> {
                 // The previous token is over. Parse it before working on the next one.
                 if sb.chars().count() != 0 {
                     match lex_token(&sb) {
-                        None => bail!("{} was not recognized as a valid number or dice expression (Code: 1)", sb),
+                        None => bail!(
+                            "{} was not recognized as a valid number or dice expression (Code: 1)",
+                            sb
+                        ),
                         Some(tok) => tokens.push(tok),
                     }
                 }
@@ -166,7 +91,7 @@ fn tokenize_expr(raw: &str) -> Result<Vec<Token>> {
 
                 sb.clear();
                 continue;
-            },
+            }
 
             // Non-transition characters are just added to the token currently being built.
             _ => sb.push(ch),
@@ -177,7 +102,10 @@ fn tokenize_expr(raw: &str) -> Result<Vec<Token>> {
     // that may not have been terminated by an operator.
     if sb.chars().count() != 0 {
         match lex_token(&sb) {
-            None => bail!("{} was not recognized as a valid number or dice expression (Code: 2)", sb),
+            None => bail!(
+                "{} was not recognized as a valid number or dice expression (Code: 2)",
+                sb
+            ),
             Some(tok) => tokens.push(tok),
         }
     }
@@ -212,27 +140,39 @@ fn lex_token(token: &str) -> Option<Token> {
 }
 
 /******************
-	PARSER & AST
+    PARSER & AST
 ******************/
 
 // DiceParser converts a dice expression token stream to
 // an AST and evaluates it according to the following grammar:
 /*
-	Expr	=> Term
-	Term	=> Factor  ([ '+' | '-' ]) Factor)*
-	Factor 	=> Primary ([ '*' | '/' ] Primary)*
-	Primary => '(' Expr ')' | DIE | NUMBER
+    Expr	=> Term
+    Term	=> Factor  ([ '+' | '-' ]) Factor)*
+    Factor 	=> Primary ([ '*' | '/' ] Primary)*
+    Primary => '(' Expr ')' | DIE | NUMBER
 */
 
-struct DiceParser {
+pub struct DiceParser {
     tokens: Vec<Token>,
     current: u64,
     errors: Vec<String>,
 }
 
 impl DiceParser {
-    pub fn new(tokens: Vec<Token>) -> DiceParser {
-        DiceParser{ tokens, current: 0, errors: Vec::new() }
+    pub fn new(raw: impl AsRef<str>) -> Result<DiceParser> {
+        Ok(DiceParser::from_tokens(tokenize_expr(raw.as_ref())?))
+    }
+
+    fn from_tokens(tokens: Vec<Token>) -> DiceParser {
+        DiceParser {
+            tokens,
+            current: 0,
+            errors: Vec::new(),
+        }
+    }
+
+    pub fn errors(&self) -> &Vec<String> {
+        &self.errors
     }
 
     // Expr satisfies the rule `Expr => Term`.
@@ -247,7 +187,11 @@ impl DiceParser {
         while self.check(Token::Term(String::new())) {
             let op = self.consume();
             let right = self.factor();
-            expr = Box::new(AstOp{ left: expr, right, op });
+            expr = Box::new(AstOp {
+                left: expr,
+                right,
+                op,
+            });
         }
 
         expr
@@ -260,7 +204,11 @@ impl DiceParser {
         while self.check(Token::Factor(String::new())) {
             let op = self.consume(); // A token
             let right = self.primary(); // An AstExpr
-            expr = Box::new(AstOp{ left: expr, right, op});
+            expr = Box::new(AstOp {
+                left: expr,
+                right,
+                op,
+            });
         }
 
         expr
@@ -273,7 +221,7 @@ impl DiceParser {
             let t = self.consume();
 
             // This should never fail because the tokenizer verifies that
-		    // this kind of token is purely numeric.
+            // this kind of token is purely numeric.
             return Box::new(AstConst(t.value().parse::<u64>().unwrap()));
         }
 
@@ -284,7 +232,10 @@ impl DiceParser {
 
             // A valid die expression is one with 2 parts, and the second part must be both present and numeric.
             if (split_die.len() != 2) || !split_die[1].chars().all(|c| c.is_ascii_digit()) {
-                self.errors.push(format!("\"{}\" was not recognized as a valid number or dice expression (Code: 3)", t.value()));
+                self.errors.push(format!(
+                    "\"{}\" was not recognized as a valid number or dice expression (Code: 3)",
+                    t.value()
+                ));
                 return Box::new(AstConst(0));
             }
 
@@ -299,7 +250,10 @@ impl DiceParser {
             let left = match split_die[0].parse::<u64>() {
                 Ok(num) => num,
                 Err(_) => {
-                    self.errors.push(format!("\"{}\" NUMBER in dice expression was not purely numeric", t.value()));
+                    self.errors.push(format!(
+                        "\"{}\" NUMBER in dice expression was not purely numeric",
+                        t.value()
+                    ));
                     0
                 }
             };
@@ -307,12 +261,15 @@ impl DiceParser {
             let right = match split_die[1].parse::<u64>() {
                 Ok(num) => num,
                 Err(_) => {
-                    self.errors.push(format!("\"{}\" NUMBER in dice expression was not purely numeric", t.value()));
+                    self.errors.push(format!(
+                        "\"{}\" NUMBER in dice expression was not purely numeric",
+                        t.value()
+                    ));
                     0
                 }
             };
 
-            return Box::new(AstDie{ left, right });
+            return Box::new(AstDie { left, right });
         }
 
         if self.check(Token::Group(String::new())) && self.peek().value() == "(" {
@@ -329,7 +286,7 @@ impl DiceParser {
             self.errors.push("Unmatched parenthesis".to_owned());
             return Box::new(AstConst(0));
         }
-        
+
         self.errors.push("Could not parse input".to_owned());
         Box::new(AstConst(0))
     }
@@ -364,8 +321,7 @@ impl DiceParser {
 
 /// AstExpr is any object which can resolve itself
 /// to a final sum and a set of rolls (if any)
-#[async_trait]
-trait AstExpr: Send + Sync {
+pub trait AstExpr: Send + Sync {
     /// Eval returns a result and a "steps string"
     fn eval(&self) -> (u64, String);
 }
@@ -398,7 +354,7 @@ impl AstExpr for AstDie {
             let roll = rng.gen_range(1..=self.right);
 
             sb.push_str(&format!("{}", roll));
-            if i != self.left-1 {
+            if i != self.left - 1 {
                 sb.push_str(", ");
             }
 
@@ -441,7 +397,7 @@ impl AstExpr for AstOp {
                     } else {
                         (left.0 / right.0, steps)
                     }
-                },
+                }
                 _ => panic!("Unreachable! The Lexer produced a FACTOR with value {}", s),
             },
             _ => panic!("Unreachable! The Lexer failed to validate an Op Token!"),

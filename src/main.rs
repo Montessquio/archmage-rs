@@ -8,7 +8,6 @@
     overflowing_literals,
     path_statements ,
     patterns_in_fns_without_body,
-    private_in_public,
     unconditional_recursion,
     unused,
     unused_allocation,
@@ -27,7 +26,7 @@
 )]
 
 use serde::Deserialize;
-use serenity::client::Client;
+use serenity::{all::ApplicationId, client::Client};
 use serenity::prelude::GatewayIntents;
 use tracing::{event, Level};
 use std::fs;
@@ -46,7 +45,6 @@ struct Config {
     pub allowed_guilds: Vec<u64>,
 
     #[serde(alias = "app-id")]
-    #[serde(alias = "app_id")]
     pub appid: u64,
 
     #[serde(alias = "secret")]
@@ -67,7 +65,7 @@ async fn main() {
     let bot = Archmage::new();
 
     let mut client = Client::builder(CONFIG.token.trim(), GatewayIntents::all())
-        .application_id(CONFIG.appid)
+        .application_id(ApplicationId::new(CONFIG.appid))
         .event_handler(bot)
         .await
         .expect("Error creating client");
