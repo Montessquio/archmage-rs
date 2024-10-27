@@ -7,16 +7,19 @@ use tracing::{event, Level};
 
 use crate::archmage::Archmage;
 
+mod music;
 mod ping;
 mod roll;
-//mod music;
 
 impl Archmage {
     pub async fn register_commands_for_guild(&self, guild: &GuildId, ctx: &Context) -> Result<()> {
+        let mut commands = vec![ping::register(), roll::register(), roll::register_short()];
+        commands.append(&mut music::register_all());
+
         let _commands = guild
             .set_commands(
                 &ctx.http,
-                vec![ping::register(), roll::register(), roll::register_short()],
+                commands,
             )
             .await?;
 
@@ -32,6 +35,7 @@ impl Archmage {
         match command.data.name.as_str() {
             "ping" => ping::run(start_time, command, ctx).await,
             "roll" | "r" => roll::run(command, ctx).await,
+            "play" => music::play::run(command, ctx).await,
             _ => self.handle_unimplemented(command, ctx).await,
         }
     }

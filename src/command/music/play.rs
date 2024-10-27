@@ -1,13 +1,59 @@
-use serenity::builder::CreateApplicationCommand;
-use serenity::model::prelude::command::CommandOptionType;
+use eyre::{bail, eyre, Result};
+use serenity::{
+    all::{Color, CommandDataOptionValue, CommandInteraction, CommandOptionType, CreateCommand, CreateCommandOption, CreateEmbed, CreateInteractionResponseMessage, Timestamp},
+    prelude::*,
+};
 
-pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
-    command.name("play").description("Resume playback or append a song to the queue")
-    .create_option(|option| {
-        option
-            .name("song")
-            .description("A link to YouTube or SoundCloud, or a search term")
-            .kind(CommandOptionType::String)
-            .required(false)
-    })
+pub async fn run(
+    command: &CommandInteraction,
+    ctx: &Context,
+) -> Result<()> {
+    let url = {
+        let option = &command
+        .data
+        .options
+        .first()
+        .ok_or(eyre!("Expected a valid video URL"))?
+        .value;
+
+        match option {
+            CommandDataOptionValue::String(input) => input,
+            _ => bail!("Unexpected input type"),
+        }
+    };
+
+    
+
+    command
+        .create_response(
+            &ctx.http,
+            serenity::all::CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new().embed(
+                    CreateEmbed::new()
+                        .color(Color::from_rgb(0x00, 0xFF, 0x00))
+                        .description(format!(
+                            "Received {} UTC",
+                            Timestamp::now().to_rfc3339().unwrap()
+                        ))
+                        .title(url)
+                        .timestamp(Timestamp::now()),
+                ),
+            ),
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| eyre!(e))
+}
+
+pub fn register() -> CreateCommand {
+    CreateCommand::new("play")
+    .description("Play audio from a youtube link in your current voice channel.")
+    .add_option(
+        CreateCommandOption::new(
+            CommandOptionType::String,
+            "link",
+            "A link to the youtube video to play.",
+        )
+        .required(true),
+    )
 }

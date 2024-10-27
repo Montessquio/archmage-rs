@@ -28,6 +28,7 @@
 use serde::Deserialize;
 use serenity::{all::ApplicationId, client::Client};
 use serenity::prelude::GatewayIntents;
+use songbird::SerenityInit;
 use tracing::{event, Level};
 use std::fs;
 
@@ -67,6 +68,7 @@ async fn main() {
     let mut client = Client::builder(CONFIG.token.trim(), GatewayIntents::all())
         .application_id(ApplicationId::new(CONFIG.appid))
         .event_handler(bot)
+        .register_songbird()
         .await
         .expect("Error creating client");
 

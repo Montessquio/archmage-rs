@@ -19,6 +19,9 @@ chrono = "^0.4.19"
 bincode = "1.2.1"
 futures = "0.3.19"
 eyre = "^0.6"
+rustube = { version = "0.6.0", features = ["tokio"] }
+songbird = { version = "0.4.3", features = ["rustls", "serenity"] }
+symphonia = "0.5.4"
 
 [dependencies.uuid]
 version = "1.2.2"
@@ -30,15 +33,5 @@ features = [
 
 [dependencies.serenity]
 default-features = false
-features = [
-    "builder",
-    "client",
-    "cache",
-    "gateway",
-    "http",
-    "model",
-    "utils",
-    "rustls_backend",
-    "unstable_discord_api",
-]
+features = ["builder", "client", "cache", "gateway", "standard_framework", "http", "model", "utils", "rustls_backend", "unstable_discord_api", "voice"]
 version = "^0.12"
