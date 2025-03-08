@@ -1,4 +1,5 @@
 use eyre::{bail, Result};
+use lazy_static::lazy_static;
 use regex::Regex;
 
 /******************
@@ -126,6 +127,7 @@ fn lex_token(token: &str) -> Option<Token> {
     lazy_static! {
         static ref RE: Regex = Regex::new(r#"^\d*d\d+$"#).unwrap();
     }
+
     if RE.is_match(token) {
         // Run the roll handler.
         if token.starts_with('d') {
@@ -363,7 +365,7 @@ impl AstExpr for AstDie {
         }
         sb.push(']');
 
-        return (rolls.iter().sum(), sb);
+        (rolls.iter().sum(), sb)
     }
 }
 

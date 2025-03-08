@@ -1,75 +1,112 @@
-use eyre::Result;
+use std::{future::Future, pin::Pin};
+
+use eyre::{bail, Result};
+use hashbrown::HashMap;
 use serenity::{
-    all::{Context, CreateEmbed, CreateInteractionResponseMessage},
+    all::{Context, CreateCommand},
     model::prelude::*,
 };
-use tracing::{event, Level};
+use tracing::info;
 
 use crate::archmage::Archmage;
 
-mod music;
-mod ping;
-mod roll;
+// mod music;
+pub mod ping;
+pub mod roll;
+pub mod pbp;
 
-impl Archmage {
-    pub async fn register_commands_for_guild(&self, guild: &GuildId, ctx: &Context) -> Result<()> {
-        let mut commands = vec![ping::register(), roll::register(), roll::register_short()];
-        commands.append(&mut music::register_all());
+pub struct CommandDispatcher {
+    commands: HashMap<String, (CreateCommand, HandleFn)>,
+}
 
-        let _commands = guild
-            .set_commands(
-                &ctx.http,
-                commands,
-            )
-            .await?;
+impl CommandDispatcher {
+    /// Create a command dispatcher with no commands in it.
+    /// Register new ones using [CommandDispatcher::register]
+    pub fn new() -> Self {
+        Self {
+            commands: HashMap::new(),
+        }
+    }
+
+    /// Add a new command to the dispatcher. Duplicate commands are not allowed
+    /// and will return an `Error`.
+    pub fn register<T>(&mut self) -> Result<()>
+    where
+        T: ArchmageCommand,
+    {
+        for (name, create_command, runner) in T::register() {
+            info!("Registered {name}");
+            if self.commands.contains_key(&name) {
+                bail!("Dispatcher already contains command named {name}");
+            }
+            let _ = self.commands.insert(name, (create_command, runner));
+        }
 
         Ok(())
     }
 
-    pub async fn handle_command(
+    /// Get the runnable function associated with the given key, or None.
+    pub fn get_runner(&self, k: impl AsRef<str>) -> Option<&HandleFn> {
+        self.commands.get(k.as_ref()).map(|(_, f)| f)
+    }
+
+    /// Shorthand to quickly run a given command. If the command is not present, returns None.
+    pub async fn run(
         &self,
-        start_time: chrono::NaiveDateTime,
+        k: impl AsRef<str>,
+        server: &Archmage,
         command: &CommandInteraction,
         ctx: &Context,
-    ) -> Result<()> {
-        match command.data.name.as_str() {
-            "ping" => ping::run(start_time, command, ctx).await,
-            "roll" | "r" => roll::run(command, ctx).await,
-            "play" => music::play::run(command, ctx).await,
-            _ => self.handle_unimplemented(command, ctx).await,
+    ) -> Option<Result<()>> {
+        match self.get_runner(k) {
+            None => None,
+            Some(f) => Some(f(server, command, ctx).await),
         }
     }
 
-    async fn handle_unimplemented(
-        &self,
-        command: &CommandInteraction,
-        ctx: &Context,
-    ) -> Result<()> {
-        let response = command
-            .create_response(
-                &ctx.http,
-                serenity::all::CreateInteractionResponse::Message(
-                    CreateInteractionResponseMessage::new().embed(
-                        CreateEmbed::new()
-                            .color(Color::from_rgb(0x00, 0xFF, 0x00))
-                            .description(
-                                "Archmage is still working on this spell! Please try again later.",
-                            )
-                            .title("Not yet implemented!")
-                            .timestamp(Timestamp::now()),
-                    ),
-                ),
-            )
-            .await;
-
-        if let Err(e) = response {
-            event!(
-                Level::ERROR,
-                error = &format!("{}", e).as_str(),
-                "DOUBLE FAULT! Error sending error message to user channel"
-            )
-        }
-
-        Ok(())
+    /// Get all metadata objects for all registered commands. Plural form of
+    /// [CommandDispatcher::get_def].
+    pub fn get_all_defs(&self) -> impl Iterator<Item = &CreateCommand> {
+        self.commands.values().map(|(cc, _)| cc)
     }
 }
+
+pub type HandleFnResult = Result<(), eyre::Report>;
+pub type HandleFnReturn<'a> = Pin<Box<dyn Future<Output=HandleFnResult> + Send + 'a>>;
+pub type HandleFn = Box<dyn for<'a> Fn(&'a Archmage, &'a CommandInteraction, &'a Context) -> HandleFnReturn<'a> + Send + Sync>;
+pub trait ArchmageCommand {
+    fn register() -> Vec<(String, CreateCommand, HandleFn)>;
+}
+
+macro_rules! handle_fn {
+    ($i:path) => {
+        Box::new(|a, i, c| Box::pin($i(a, i, c)))
+    }
+}
+pub(crate) use handle_fn;
+
+macro_rules! registerable_tuples {
+    ($($i:ident),+) => {
+        #[allow(unused_parens)]
+        impl<$( $i ),+> ArchmageCommand for ( $( $i ),+ , ) where $( $i: ArchmageCommand ),+ {
+            fn register() -> Vec<(String, CreateCommand, HandleFn)> {
+                vec![
+                    $( $i::register() ),+
+                ]
+                .into_iter()
+                .flatten()
+                .collect()
+            }
+        }
+    }
+}
+
+registerable_tuples!(T1);
+registerable_tuples!(T1, T2);
+registerable_tuples!(T1, T2, T3);
+registerable_tuples!(T1, T2, T3, T4);
+registerable_tuples!(T1, T2, T3, T4, T5);
+registerable_tuples!(T1, T2, T3, T4, T5, T6);
+registerable_tuples!(T1, T2, T3, T4, T5, T6, T7);
+registerable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8);
+registerable_tuples!(T1, T2, T3, T4, T5, T6, T7, T8, T9);

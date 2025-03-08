@@ -1,4 +1,14 @@
+//! # Archmage Tabletop Automator
 //!
+//! *Archmage* is a chatbot, backed by Discord, designed to automate all your
+//! tabletop RPG needs! It's primary design is meant to be *unobtrusive*, there
+//! to help you when you need it, and invisible when you don't!
+//!
+//! If you're just trying to run Archmage yourself, you probably want to read
+//! the main README.md page - the documentation here is primarily for developers
+//! looking to improve Archmage!
+
+// Refuse to compile unclean code.
 #![deny(
     bad_style,
     dead_code,
@@ -6,7 +16,7 @@
     non_shorthand_field_patterns,
     no_mangle_generic_items,
     overflowing_literals,
-    path_statements ,
+    path_statements,
     patterns_in_fns_without_body,
     unconditional_recursion,
     unused,
@@ -22,25 +32,18 @@
     unused_import_braces,
     unused_qualifications,
     unused_results,
-    unused_variables,
+    unused_variables
 )]
 
 use serde::Deserialize;
-use serenity::{all::ApplicationId, client::Client};
-use serenity::prelude::GatewayIntents;
-use songbird::SerenityInit;
-use tracing::{event, Level};
 use std::fs;
-
-#[macro_use]
-extern crate lazy_static;
+use tracing::{event, Level};
 
 mod archmage;
 use archmage::Archmage;
-
 mod command;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone)]
 struct Config {
     #[serde(alias = "allowed-guilds")]
     pub allowed_guilds: Vec<u64>,
@@ -52,30 +55,19 @@ struct Config {
     pub token: String,
 }
 
-lazy_static!{
-    static ref CONFIG: Config = {
-        toml::from_str(&fs::read_to_string("secret/config.toml").expect("secret/config.toml not present")).expect("Invalid Configuration")
-    };
-}
-
 #[tokio::main]
-async fn main() {
+async fn main() -> eyre::Result<()> {
     tracing_subscriber::fmt::init();
 
-    // Create the listener object.
-    let bot = Archmage::new();
-
-    let mut client = Client::builder(CONFIG.token.trim(), GatewayIntents::all())
-        .application_id(ApplicationId::new(CONFIG.appid))
-        .event_handler(bot)
-        .register_songbird()
-        .await
-        .expect("Error creating client");
+    let config = toml::from_str(
+        &fs::read_to_string("secret/config.toml").expect("secret/config.toml not present"),
+    )
+    .expect("Invalid Configuration");
 
     event!(Level::INFO, "Strike the Earth!");
 
-    // start listening for events by starting a single shard
-    if let Err(why) = client.start().await {
-        println!("An error occurred while running the client: {:?}", why);
-    }
+    Archmage::new(config)
+        .with_commands::<(command::ping::PingCommand, command::roll::RollCommand)>()
+        .start()
+        .await
 }
