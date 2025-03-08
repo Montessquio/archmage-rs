@@ -13,7 +13,7 @@ use crate::archmage::Archmage;
 // mod music;
 pub mod ping;
 pub mod roll;
-pub mod pbp;
+//pub mod pbp;
 
 pub struct CommandDispatcher {
     commands: HashMap<String, (CreateCommand, HandleFn)>,
