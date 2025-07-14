@@ -45,6 +45,7 @@ use archmage::Archmage;
 use crate::db::ArchmageDatabase;
 mod db;
 mod command;
+mod service;
 
 #[derive(Deserialize)]
 struct Config {
@@ -81,6 +82,8 @@ async fn main() -> Result<()> {
     let db = ArchmageDatabase::connect().await.expect("Database connection failed!");
 
     let mut bot = Archmage::new(db);
+    bot.register_service::<service::PpbService>()?;
+
     bot.register_command::<command::Ping>()?;
     bot.register_command::<command::Roll>()?;
     bot.register_command::<command::PbpCommand>()?;

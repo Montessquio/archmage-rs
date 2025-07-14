@@ -8,6 +8,8 @@ use crate::command::pbp::PbpError;
 use crate::command::RollError;
 use crate::db::ArchmageDatabase;
 use crate::db::DBError;
+use crate::service::Service;
+use crate::service::ServiceError;
 use chrono::NaiveDateTime;
 use eyre::{bail, Result};
 use futures::future::BoxFuture;
@@ -19,6 +21,7 @@ use serenity::model::application::interaction::InteractionResponseType;
 use serenity::model::prelude::interaction::application_command::ApplicationCommandInteraction;
 use serenity::model::prelude::Ready;
 use serenity::{model::prelude::*, prelude::*};
+use tokio::task::JoinHandle;
 use tracing::warn;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -74,6 +77,7 @@ pub struct Archmage {
     command_constructors: HashMap<String, CreateApplicationCommand>,
     handlers: HashMap<String, ArchmageCallbackFn>,
     db: Arc<ArchmageDatabase>,
+    services: Vec<JoinHandle<Result<(), ServiceError>>>,
 }
 
 impl Archmage {
@@ -82,7 +86,13 @@ impl Archmage {
             command_constructors: HashMap::new(),
             handlers: HashMap::new(),
             db: Arc::new(db),
+            services: Vec::new(),
         }
+    }
+
+    pub fn register_service<S: Service + Send + Sync + 'static>(&mut self) -> Result<(), ServiceError> {
+        self.services.push(tokio::spawn(S::start(Arc::clone(&self.db))));
+        Ok(())
     }
 
     pub fn register_command<S: Spell + 'static>(&mut self) -> Result<()> {
