@@ -1,5 +1,8 @@
 use serenity::builder::CreateApplicationCommand;
+use serenity::model::application::interaction::application_command::ApplicationCommandInteraction;
 use serenity::model::prelude::command::CommandOptionType;
+use serenity::prelude::*;
+use eyre::Result;
 
 pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
     command.name("play").description("Resume playback or append a song to the queue")
@@ -10,4 +13,9 @@ pub fn register(command: &mut CreateApplicationCommand) -> &mut CreateApplicatio
             .kind(CommandOptionType::String)
             .required(false)
     })
+}
+
+pub fn run(ctx: &Context, command: &ApplicationCommandInteraction) -> Result<()> {
+
+    Ok(())
 }

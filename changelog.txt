@@ -1,0 +1,2 @@
+- Removed now-outdated discriminator from roll results.
++ Made roll results show nickname front and center!

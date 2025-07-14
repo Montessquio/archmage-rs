@@ -1,75 +1,103 @@
-use eyre::Result;
-use serenity::model::application::interaction::InteractionResponseType;
-use serenity::model::prelude::*;
-use serenity::{
-    model::application::interaction::application_command::ApplicationCommandInteraction, prelude::*,
-};
-use tracing::{event, Level};
+mod ping;
+pub use ping::Ping;
+mod roll;
+pub use roll::{Roll, RollError};
 
-use crate::archmage::Archmage;
+pub mod pbp;
+pub use pbp::PbpCommand;
 
-mod misc;
-mod music;
-use self::misc::CreateApplicationCommandsMiscExt;
-use self::music::CreateApplicationCommandsMusicExt;
+use serenity::{builder::CreateInteractionResponse, json::Value, model::prelude::{command::CommandOptionType, interaction::{application_command::{CommandData, CommandDataOption}, InteractionResponseType}}, utils::Color};
+pub struct StandardResponse {
+    color: Color,
+    title: String,
+    description: String,
+    fields: Vec<(String, String, bool)>,
+}
 
-impl Archmage {
-    pub async fn register_commands_for_guild(&self, guild: &GuildId, ctx: &Context) -> Result<()> {
-        let _ = GuildId::set_application_commands(guild, &ctx.http, |commands| {
-            commands.register_misc_commands().register_music_commands()
-        })
-        .await?;
+fn reply() -> StandardResponse {
+    StandardResponse {
+        color: Color::from_rgb(0x00, 0xFF, 0x00),
+        title: String::new(),
+        description: String::new(),
+        fields: Vec::new(),
+    }
+}
 
-        Ok(())
+impl StandardResponse {
+    #[allow(unused)]
+    pub fn color(&mut self, color: Color) -> &mut Self {
+        self.color = color;
+        self
     }
 
-    pub async fn handle_command(
-        &self,
-        start_time: chrono::NaiveDateTime,
-        command: &ApplicationCommandInteraction,
-        ctx: &Context,
-    ) -> Result<()> {
-        macro_rules! handler {
-            ($fn:path) => {
-                if $fn(start_time, command, ctx).await? {
-                    return Ok(());
-                }
-            };
+    pub fn title(&mut self, title: impl ToString) -> &mut Self {
+        self.title = title.to_string();
+        self
+    }
+
+    pub fn desc(&mut self, desc: impl ToString) -> &mut Self {
+        self.description = desc.to_string();
+        self
+    }
+
+    pub fn field(&mut self, title: &str, value: &str, inline: bool) -> &mut Self {
+        self.fields.push((title.to_owned(), value.to_owned(), inline));
+        self
+    }
+
+    pub fn finish<'a, 'b>(&mut self, response: &'a mut CreateInteractionResponse<'b>) -> &'a mut CreateInteractionResponse<'b> {
+        response
+        .kind(InteractionResponseType::ChannelMessageWithSource)
+        .interaction_response_data(|m| {
+            m.embed(|e| {
+                e.color(self.color)
+                    .description(self.description.clone())
+                    .title(self.title.clone())
+                    .fields(self.fields.clone())
+                    .timestamp(chrono::Utc::now().to_rfc3339())
+            })
+        })
+    }
+}
+
+pub trait CommandOptionsRetrievalExt {
+    fn find<'a>(&'a self, name: &str) -> Option<&'a CommandDataOption>;
+}
+
+pub trait CommandOptionsInterpretationExt {
+    fn interpret<'a>(&'a self, kind: CommandOptionType) -> Option<&'a Value>;
+}
+
+impl CommandOptionsRetrievalExt for Option<&CommandDataOption> {
+    fn find<'a>(&'a self, name: &str) -> Option<&'a CommandDataOption> {
+        self.and_then(|cdo| cdo.find(name))
+    }
+}
+
+
+impl CommandOptionsInterpretationExt for Option<&CommandDataOption> {
+    fn interpret(&self, kind: CommandOptionType) -> Option<&Value> {
+        self.and_then(|cdo| cdo.interpret(kind))
+    }
+}
+
+impl CommandOptionsInterpretationExt for CommandDataOption {
+    fn interpret<'a>(&'a self, kind: CommandOptionType) -> Option<&'a Value> {
+        match self.kind == kind {
+            true => self.value.as_ref(),
+            false => None,
         }
+    }
+}
 
-        // Fast-returns Err if the handler errors
-        // If the handler returns `true`, fast-exits
-        // with `Ok(())`. If the handler returns
-        // `false`, continues to the next handler.
-        handler!(misc::misc_handler);
-        handler!(music::music_handler);
+impl CommandOptionsRetrievalExt for CommandDataOption {
+    fn find<'a>(&'a self, name: &str) -> Option<&'a CommandDataOption> {
+        self.options.iter().find(|cdo| cdo.name == name)
+    }
+}
 
-        // No handler consumed the command!
-        // Handle Unimplemented
-        let response = command
-                .create_interaction_response(&ctx.http, |response| {
-                    response
-                        .kind(InteractionResponseType::ChannelMessageWithSource)
-                        .interaction_response_data(|m| {
-                            m.embed(|e| {
-                                use serenity::utils::Color;
-                                e.color(Color::from_rgb(0x00, 0xFF, 0x00))
-                                 .description("Archmage is still working on this spell! Please try again later.")
-                                 .title("Not yet implemented!")
-                                 .timestamp(chrono::Utc::now().to_rfc3339())
-                            })
-                        })
-                    }
-                ).await;
-
-        if let Err(e) = response {
-            event!(
-                Level::ERROR,
-                error = &format!("{}", e).as_str(),
-                "DOUBLE FAULT! Error sending error message to user channel"
-            )
-        }
-
-        Ok(())
+impl CommandOptionsRetrievalExt for CommandData {
+    fn find<'a>(&'a self, name: &str) -> Option<&'a CommandDataOption> {
+        self.options.iter().find(|cdo| cdo.name == name)
     }
 }

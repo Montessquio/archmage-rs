@@ -35,9 +35,9 @@ impl CreateApplicationCommandsMusicExt for CreateApplicationCommands {
     }
 }
 
-pub async fn music_handler(_start_time: chrono::NaiveDateTime, command: &ApplicationCommandInteraction, _ctx: &Context) -> Result<bool> {
+pub async fn music_handler(_start_time: chrono::NaiveDateTime, command: &ApplicationCommandInteraction, ctx: &Context) -> Result<bool> {
     match command.data.name.as_str() {
-        "stub" => Ok(()),
+        "play" => play::run(ctx, command),
         _ => return Ok(false),
     }.map(|_| true)
 }
