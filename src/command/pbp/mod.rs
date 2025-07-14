@@ -8,6 +8,7 @@ use serenity::async_trait;
 use serenity::model::prelude::command::CommandOptionType;
 use thiserror::Error;
 use crate::archmage::{ArchmageContext, ArchmageError, Spell};
+use crate::command::DurationDiscordPrintExt;
 
 mod set_pbp;
 mod get_pbp;
@@ -274,9 +275,12 @@ impl PbpSchedule {
 
         write!(
             s,
-            "**Global Flags:** {}\n**Current Turn:** {}\n**Turn Order:**\n",
+            "**Global Flags:** {}\n**Current Turn:** {}\n**Time Remaining:** {} ({}/{})\n**Turn Order:**\n",
             self.flags.pretty_print(),
             self.current_turn_index.to_string().as_str(),
+            self.time_remaining.as_duration_pretty(),
+            self.time_remaining.as_discord_date(),
+            self.time_remaining.as_discord_span(),
         )?;
 
         for (index, interval) in self.intervals.iter().enumerate() {
@@ -336,17 +340,11 @@ impl PbpInterval {
     }
 
     pub fn pretty_print(&self, index: i64) -> String {
-        let seconds = self.delay.num_seconds() % 60;
-        let minutes = (self.delay.num_seconds() / 60) % 60;
-        let hours = (self.delay.num_seconds() / 60) / 60;
-
         format!(
-            "- {0}: <@{1}>\n  - Duration: {2}:{3}:{4}\n  - Flags: {5}",
+            "- {}: <@{}>\n  - Duration: {}\n  - Flags: {}",
             index,
             self.user,
-            hours,
-            minutes,
-            seconds,
+            self.delay.as_duration_pretty(),
             self.flags.pretty_print(),
         )
     }

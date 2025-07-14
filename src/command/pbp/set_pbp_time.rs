@@ -19,8 +19,6 @@ pub async fn run(
 
     let new_time_secs = command
         .data
-        .options
-        .first()
         .find("set-time")
         .find("seconds")
         .interpret(CommandOptionType::Integer)

@@ -1,4 +1,5 @@
 mod ping;
+use chrono::Duration;
 pub use ping::Ping;
 mod roll;
 pub use roll::{Roll, RollError};
@@ -99,5 +100,30 @@ impl CommandOptionsRetrievalExt for CommandDataOption {
 impl CommandOptionsRetrievalExt for CommandData {
     fn find<'a>(&'a self, name: &str) -> Option<&'a CommandDataOption> {
         self.options.iter().find(|cdo| cdo.name == name)
+    }
+}
+
+pub trait DurationDiscordPrintExt {
+    fn as_duration_pretty(&self) -> String;
+    fn as_unix_timestamp(&self) -> i64;
+    fn as_discord_date(&self) -> String {
+        format!("<t:{}:F>", self.as_unix_timestamp())
+    }
+    fn as_discord_span(&self) -> String {
+        format!("<t:{}:R>", self.as_unix_timestamp())
+    }
+}
+
+impl DurationDiscordPrintExt for Duration {
+    fn as_duration_pretty(&self) -> String {
+        let seconds = self.num_seconds() % 60;
+        let minutes = (self.num_seconds() / 60) % 60;
+        let hours = (self.num_seconds() / 60) / 60;
+
+        format!("{hours}:{minutes}:{seconds}")
+    }
+
+    fn as_unix_timestamp(&self) -> i64 {
+        chrono::Utc::now().timestamp() + self.num_seconds()
     }
 }

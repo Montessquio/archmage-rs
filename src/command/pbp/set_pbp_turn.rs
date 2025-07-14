@@ -19,8 +19,6 @@ pub async fn run(
 
     let new_turn_index = command
         .data
-        .options
-        .first()
         .find("pbp")
         .find("pbp-string")
         .interpret(CommandOptionType::Integer)
